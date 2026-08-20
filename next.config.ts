@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
   // so we don't let them block a deployment.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // The bundled Windows runtime can crash in webpack's WASM cache. Vercel
+  // builds are deterministic without it, and this keeps local verification stable.
+  webpack(config) {
+    config.cache = false;
+    return config;
+  },
 };
 
 export default nextConfig;
