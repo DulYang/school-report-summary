@@ -21,6 +21,9 @@ create table if not exists semesters (
   user_id uuid,
   created_at timestamptz not null default now()
 );
+-- Upgrade early demo installs that created semesters before date tracking existed.
+alter table semesters add column if not exists start_date date;
+alter table semesters add column if not exists end_date date;
 alter table semesters enable row level security;
 drop policy if exists "semesters_v1_read" on semesters;
 create policy "semesters_v1_read" on semesters for select using (true);
@@ -35,6 +38,12 @@ create table if not exists classes (
   user_id uuid,
   created_at timestamptz not null default now()
 );
+-- Upgrade early demo installs where a class was linked only through its semester.
+alter table classes add column if not exists school_id uuid references schools(id) on delete cascade;
+update classes c
+set school_id = s.school_id
+from semesters s
+where c.semester_id = s.id and c.school_id is null;
 alter table classes enable row level security;
 drop policy if exists "classes_v1_read" on classes;
 create policy "classes_v1_read" on classes for select using (true);
