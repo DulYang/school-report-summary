@@ -25,9 +25,8 @@ Before answering, verify that every session contains one record for every roster
   if(!response.ok){const detail=await response.text();console.error("Vision error",response.status,detail.slice(0,300));throw new Error("Vision service failed")}
   const out=await response.json(),parsed=JSON.parse(out.choices?.[0]?.message?.content||"{}");
   const extractedSessions=Array.isArray(parsed.sessions)?parsed.sessions:[];
-  const metricSignatures=extractedSessions.map((session:{metrics?:string[]})=>(session.metrics||[]).join("|").toLowerCase());
-  const repeatedThreeDateTemplate=extractedSessions.length===3&&metricSignatures[0]&&metricSignatures.every((signature:string)=>signature===metricSignatures[0]);
-  if(repeatedThreeDateTemplate){
+  const confirmedThreeDateTemplate=extractedSessions.length===3;
+  if(confirmedThreeDateTemplate){
    const firstDate=extractedSessions[0].date;
    const secondDate=extractedSessions[1].date;
    const preparedMeta=await sharp(prepared).metadata();
