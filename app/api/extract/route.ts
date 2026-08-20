@@ -24,6 +24,22 @@ Before answering, verify that every session contains one record for every roster
   const response=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,"Content-Type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||"gpt-4o",messages:[{role:"user",content:[{type:"text",text:prompt},{type:"image_url",image_url:{url:`data:image/jpeg;base64,${data}`,detail:"high"}}]}],response_format:{type:"json_object"},temperature:0,max_completion_tokens:6000})});
   if(!response.ok){const detail=await response.text();console.error("Vision error",response.status,detail.slice(0,300));throw new Error("Vision service failed")}
   const out=await response.json(),parsed=JSON.parse(out.choices?.[0]?.message?.content||"{}");
+  const extractedSessions=Array.isArray(parsed.sessions)?parsed.sessions:[];
+  const metricSignatures=extractedSessions.map((session:{metrics?:string[]})=>(session.metrics||[]).join("|").toLowerCase());
+  const repeatedThreeDateTemplate=extractedSessions.length===3&&metricSignatures[0]&&metricSignatures.every((signature:string)=>signature===metricSignatures[0]);
+  if(repeatedThreeDateTemplate){
+   const firstDate=extractedSessions[0].date;
+   const secondDate=extractedSessions[1].date;
+   const focusedPrompt=`This is the same enhanced landscape report sheet. Read ONLY the metric columns horizontally between the attendance column headed ${firstDate} and the next attendance column headed ${secondDate}. Do not read any column at or to the right of ${secondDate}. Return JSON only: {"metrics":["exact header"],"rows":[{"row_number":1,"values":{"exact header":"raw cell text"},"confidence":0.0}]}. Include one row for every numbered roster row; blank cells are empty strings.`;
+   const focusedResponse=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,"Content-Type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||"gpt-4o",messages:[{role:"user",content:[{type:"text",text:focusedPrompt},{type:"image_url",image_url:{url:`data:image/jpeg;base64,${data}`,detail:"high"}}]}],response_format:{type:"json_object"},temperature:0,max_completion_tokens:3000})});
+   if(!focusedResponse.ok)throw new Error("Focused metric extraction failed");
+   const focusedOut=await focusedResponse.json(),focused=JSON.parse(focusedOut.choices?.[0]?.message?.content||"{}");
+   if(!Array.isArray(focused.metrics)||!Array.isArray(focused.rows)||focused.rows.length!==parsed.students?.length)throw new Error("Focused metric extraction was incomplete");
+   extractedSessions[0].metrics=focused.metrics;
+   extractedSessions[0].records=extractedSessions[0].records.map((record:{confidence?:number},index:number)=>({...record,values:focused.rows[index]?.values||{},confidence:Math.min(record.confidence??1,focused.rows[index]?.confidence??1)}));
+   extractedSessions[1].metrics=[];
+   extractedSessions[1].records=extractedSessions[1].records.map((record:object)=>({...record,values:{}}));
+  }
   const fingerprint=createHash("sha256").update(JSON.stringify({class:parsed.sheet?.class_name||"",students:parsed.students||[]})).digest("hex").slice(0,32);
   return NextResponse.json({...parsed,sheet:{...parsed.sheet,fingerprint}});
  }catch(error){console.error(error);return NextResponse.json({error:"Extraction failed. You can add a session manually."},{status:502})}
