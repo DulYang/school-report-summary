@@ -30,11 +30,13 @@ Before answering, verify that every session contains one record for every roster
   if(repeatedThreeDateTemplate){
    const firstDate=extractedSessions[0].date;
    const secondDate=extractedSessions[1].date;
-   const focusedPrompt=`This is the same enhanced landscape report sheet. Read ONLY the metric columns horizontally between the attendance column headed ${firstDate} and the next attendance column headed ${secondDate}. Do not read any column at or to the right of ${secondDate}. Return JSON only: {"metrics":["exact header"],"rows":[{"row_number":1,"values":{"exact header":"raw cell text"},"confidence":0.0}]}. Include one row for every numbered roster row; blank cells are empty strings.`;
+   const focusedPrompt=`This is the same enhanced landscape report sheet using the confirmed coach template. For the session headed ${firstDate}, the attendance column is followed by exactly two score columns: Focus Training and Right Behavior. Read ONLY those two score columns, stopping before the attendance column headed ${secondDate}. P and A are attendance marks and must never appear as score values. Score values may be numerals, dashes, or blank. Return exactly 14 numbered rows and JSON only: {"metrics":["Focus Training","Right Behavior"],"rows":[{"row_number":1,"values":{"Focus Training":"raw score","Right Behavior":"raw score"},"confidence":0.0}]}. Blank score cells are empty strings.`;
    const focusedResponse=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,"Content-Type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||"gpt-4o",messages:[{role:"user",content:[{type:"text",text:focusedPrompt},{type:"image_url",image_url:{url:`data:image/jpeg;base64,${data}`,detail:"high"}}]}],response_format:{type:"json_object"},temperature:0,max_completion_tokens:3000})});
    if(!focusedResponse.ok)throw new Error("Focused metric extraction failed");
    const focusedOut=await focusedResponse.json(),focused=JSON.parse(focusedOut.choices?.[0]?.message?.content||"{}");
-   if(!Array.isArray(focused.metrics)||!Array.isArray(focused.rows)||focused.rows.length!==parsed.students?.length)throw new Error("Focused metric extraction was incomplete");
+   const focusedMetrics=Array.isArray(focused.metrics)?focused.metrics.map((metric:string)=>metric.trim()):[];
+   const hasAttendanceAsScore=Array.isArray(focused.rows)&&focused.rows.some((row:{values?:Record<string,string>})=>Object.values(row.values||{}).some(value=>/^[PAL]$/i.test(String(value).trim())));
+   if(focusedMetrics.join("|")!=="Focus Training|Right Behavior"||!Array.isArray(focused.rows)||focused.rows.length!==parsed.students?.length||hasAttendanceAsScore)throw new Error("Focused metric extraction was incomplete");
    extractedSessions[0].metrics=focused.metrics;
    extractedSessions[0].records=extractedSessions[0].records.map((record:{confidence?:number},index:number)=>({...record,values:focused.rows[index]?.values||{},confidence:Math.min(record.confidence??1,focused.rows[index]?.confidence??1)}));
    extractedSessions[1].metrics=[];
