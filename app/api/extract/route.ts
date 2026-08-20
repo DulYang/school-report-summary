@@ -30,13 +30,18 @@ Before answering, verify that every session contains one record for every roster
   if(repeatedThreeDateTemplate){
    const firstDate=extractedSessions[0].date;
    const secondDate=extractedSessions[1].date;
+   const preparedMeta=await sharp(prepared).metadata();
+   const preparedWidth=preparedMeta.width||2400,preparedHeight=preparedMeta.height||1350;
+   const focusedImage=await sharp(prepared).extract({left:Math.round(preparedWidth*.46),top:Math.round(preparedHeight*.08),width:Math.round(preparedWidth*.23),height:Math.round(preparedHeight*.84)}).resize({width:1800}).sharpen().jpeg({quality:94}).toBuffer();
+   const focusedData=focusedImage.toString("base64");
    const focusedPrompt=`This is the same enhanced landscape report sheet using the confirmed coach template. For the session headed ${firstDate}, the attendance column is followed by exactly two score columns: Focus Training and Right Behavior. Read ONLY those two score columns, stopping before the attendance column headed ${secondDate}. P and A are attendance marks and must never appear as score values. Score values may be numerals, dashes, or blank. Return exactly 14 numbered rows and JSON only: {"metrics":["Focus Training","Right Behavior"],"rows":[{"row_number":1,"values":{"Focus Training":"raw score","Right Behavior":"raw score"},"confidence":0.0}]}. Blank score cells are empty strings.`;
-   const focusedResponse=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,"Content-Type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||"gpt-4o",messages:[{role:"user",content:[{type:"text",text:focusedPrompt},{type:"image_url",image_url:{url:`data:image/jpeg;base64,${data}`,detail:"high"}}]}],response_format:{type:"json_object"},temperature:0,max_completion_tokens:3000})});
+   const focusedResponse=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,"Content-Type":"application/json"},body:JSON.stringify({model:process.env.OPENAI_VISION_MODEL||"gpt-4o",messages:[{role:"user",content:[{type:"text",text:focusedPrompt},{type:"image_url",image_url:{url:`data:image/jpeg;base64,${focusedData}`,detail:"high"}}]}],response_format:{type:"json_object"},temperature:0,max_completion_tokens:3000})});
    if(!focusedResponse.ok)throw new Error("Focused metric extraction failed");
    const focusedOut=await focusedResponse.json(),focused=JSON.parse(focusedOut.choices?.[0]?.message?.content||"{}");
    const focusedMetrics=Array.isArray(focused.metrics)?focused.metrics.map((metric:string)=>metric.trim()):[];
    const hasAttendanceAsScore=Array.isArray(focused.rows)&&focused.rows.some((row:{values?:Record<string,string>})=>Object.values(row.values||{}).some(value=>/^[PAL]$/i.test(String(value).trim())));
-   if(focusedMetrics.join("|")!=="Focus Training|Right Behavior"||!Array.isArray(focused.rows)||focused.rows.length!==parsed.students?.length||hasAttendanceAsScore)throw new Error("Focused metric extraction was incomplete");
+   const absentHasNumericScore=Array.isArray(focused.rows)&&focused.rows.some((row:{values?:Record<string,string>},index:number)=>extractedSessions[0].records[index]?.attendance==="absent"&&Object.values(row.values||{}).some(value=>/\d/.test(String(value))));
+   if(focusedMetrics.join("|")!=="Focus Training|Right Behavior"||!Array.isArray(focused.rows)||focused.rows.length!==parsed.students?.length||hasAttendanceAsScore||absentHasNumericScore)throw new Error("Focused metric extraction was incomplete");
    extractedSessions[0].metrics=focused.metrics;
    extractedSessions[0].records=extractedSessions[0].records.map((record:{confidence?:number},index:number)=>({...record,values:focused.rows[index]?.values||{},confidence:Math.min(record.confidence??1,focused.rows[index]?.confidence??1)}));
    extractedSessions[1].metrics=[];
