@@ -10,11 +10,11 @@ Next.js (App Router) + Supabase (Postgres + Storage) + Vercel. AI extraction via
 ## Key User Action Flow
 1. Open a school → semester → pick or create a class tab.
 2. Click "Upload Report" → select a screenshot image.
-3. Image stored in Supabase Storage; server sends it to Vision API.
-4. Extracted entries (student name, marks, attendance, remarks) returned as structured JSON.
-5. Review screen lists each extracted entry next to the class roster — admin confirms or edits.
-6. On "Save," entries persist to `report_entries` linked to class + student.
-7. Spreadsheet tab updates instantly with new rows.
+3. Image stored in Supabase Storage; server auto-rotates/normalizes it and sends it to Vision API.
+4. AI returns sheet metadata, roster rows, all visible session dates, the metric labels under each date, and every student/date cell.
+5. Review screen renders the same matrix as the paper: roster rows and grouped date columns. Admin resolves names and edits uncertain cells.
+6. On "Save," the app upserts sessions, metric definitions, and student session values using stable uniqueness keys.
+7. Spreadsheet tab updates instantly with new grouped date columns; reprocessing the same sheet adds only new information.
 
 ## Responsive Nav Shell
 Persistent left sidebar: Schools → Semester selector → Class tabs. Collapses to hamburger on mobile. Current class highlighted.
@@ -25,7 +25,7 @@ Persistent left sidebar: Schools → Semester selector → Class tabs. Collapses
 3. **AI module** — `lib/ai/extraction.ts` — vision prompt, parse, confidence scoring.
 
 ## Why Core Works Without AI
-If extraction fails, admin can manually add/edit entries in the spreadsheet tab. The data model and UI are fully functional without the AI step.
+If extraction fails, admin can manually add a session date, choose its metrics, and fill/edit cells in the spreadsheet matrix. The data model and UI are fully functional without the AI step.
 
 ## Repo Structure
 ```
@@ -49,6 +49,6 @@ src/
 |--------|---------------|------|-------------|
 | schools | School + semester lifecycle | schools, semesters | 1 |
 | classes | Class tabs + student roster | classes, students | 2 |
-| spreadsheet | Read-only tabbed view of entries | report_entries (read) | 3 |
+| spreadsheet | Editable roster-by-date matrix | sessions, metrics, student_session_values | 3 |
 | screenshots | Upload + store image | screenshots | 4 |
-| extraction | AI read + review + save | screenshots, report_entries (write) | 5 |
+| extraction | Multi-date matrix extraction + review | report_sheets, screenshots, sessions, values | 5 |

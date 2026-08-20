@@ -17,4 +17,4 @@ AI may only call named tools: `extract_screenshot`, `save_entries`, `match_stude
 Every extraction and save logged with actor + action + target + timestamp. Reviewable after the fact. `review_status` on entries ensures nothing from AI is trusted without human check.
 
 ## Data Sensitivity
-Student names + marks are personal data. Lock-down sprint must precede any real student data entry. Demo seed uses fictional names.
+Student names, attendance, assessment values, coach notes, and sheet images are personal data. Lock-down sprint must precede any real student data entry or real report upload. Demo seed and test sheets use fictional names.
